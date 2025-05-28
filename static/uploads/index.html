@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Vision Aid Demo</title>
+</head>
+<body style="font-family:sans-serif; text-align:center; padding:2rem;">
+  <h1>Vision Aid 실시간 감지</h1>
+  <p id="status">대기 중…</p>
+  <button id="startBtn" style="font-size:1.2rem; padding:.5rem 1rem;">시작</button>
+  <audio id="player"></audio>
+
+  <script>
+    const server = "https://797c-124-50-176-22.ngrok-free.app/latest_detection";
+    const statusEl = document.getElementById("status");
+    const player   = document.getElementById("player");
+    const btn      = document.getElementById("startBtn");
+
+    let intervalId;
+
+    btn.addEventListener("click", () => {
+      btn.disabled = true;
+      statusEl.textContent = "시작됨, 10초마다 감지 폴링 중…";
+
+      // 첫 호출 즉시 실행
+      pollAndPlay();
+
+      // 이후 10초마다 반복
+      intervalId = setInterval(pollAndPlay, 10000);
+    });
+
+    async function pollAndPlay() {
+      try {
+        const res = await fetch(`${server}/latest_detection`);
+        if (!res.ok) throw `HTTP ${res.status}`;
+        const j = await res.json();
+        // 상태 텍스트 갱신
+        const dets = (j.result.detections || []).map(d=>d.object||d.class);
+        statusEl.textContent = dets.length ? dets.join(", ") : "인식 없음";
+
+        // tts_url이 있을 때만 재생
+        if (j.tts_url) {
+          player.src = `${server}${j.tts_url}`;
+          await player.play();  // 최신 TTS 자동 재생
+        }
+      } catch (e) {
+        console.log("Polling error:", e);
+        statusEl.textContent = "오류 발생, 콘솔 확인";
+      }
+    }
+  </script>
+</body>
+</html>
