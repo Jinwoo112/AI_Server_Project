@@ -1,54 +1,69 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Vision Aid Demo</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vision Aid 실시간 감지</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 2rem;
+    }
+    #startBtn {
+      font-size: 1.2rem;
+      padding: 0.5rem 1rem;
+      margin-top: 1rem;
+    }
+    #status {
+      margin: 1.5rem 0;
+      font-size: 1.1rem;
+      color: #333;
+    }
+  </style>
 </head>
-<body style="font-family:sans-serif; text-align:center; padding:2rem;">
+<body>
   <h1>Vision Aid 실시간 감지</h1>
   <p id="status">대기 중…</p>
-  <button id="startBtn" style="font-size:1.2rem; padding:.5rem 1rem;">시작</button>
+  <button id="startBtn">시작</button>
   <audio id="player"></audio>
 
   <script>
-    const server = "https://YourDomainAddress";
-    const statusEl = document.getElementById("status");
-    const player   = document.getElementById("player");
-    const btn      = document.getElementById("startBtn");
-
-    let intervalId;
-
-    btn.addEventListener("click", () => {
-      btn.disabled = true;
-      statusEl.textContent = "시작됨, 10초마다 감지 폴링 중…";
-
-      // 첫 호출 즉시 실행
-      pollAndPlay();
-
-      // 이후 10초마다 반복
-      intervalId = setInterval(pollAndPlay, 10000);
-    });
+    const serverRoot = "";  // 빈 문자열로 두면 같은 호스트 기준 "/latest_detection" 호출
+    const statusEl   = document.getElementById("status");
+    const player     = document.getElementById("player");
+    const btn        = document.getElementById("startBtn");
 
     async function pollAndPlay() {
       try {
-        const res = await fetch(`${server}/latest_detection`);
-        if (!res.ok) throw `HTTP ${res.status}`;
+        // 1) 최신 감지 결과 JSON 가져오기
+        const res = await fetch(serverRoot + "/latest_detection");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const j = await res.json();
-        // 상태 텍스트 갱신
-        const dets = (j.result.detections || []).map(d=>d.object||d.class);
+
+        // 2) 상태 메시지 갱신: detections 배열을 object/class 필드 기준으로 표시
+        const dets = (j.result.detections || []).map(d => d.object || d.class);
         statusEl.textContent = dets.length ? dets.join(", ") : "인식 없음";
 
-        // tts_url이 있을 때만 재생
+        // 3) tts_url이 있으면 MP3 재생
         if (j.tts_url) {
-          player.src = `${server}${j.tts_url}`;
-          await player.play();  // 최신 TTS 자동 재생
+          player.src = serverRoot + j.tts_url;
+          await player.play();
         }
       } catch (e) {
-        console.log("Polling error:", e);
+        console.error("Polling error:", e);
         statusEl.textContent = "오류 발생, 콘솔 확인";
       }
     }
+
+    btn.addEventListener("click", () => {
+      btn.disabled = true;
+      statusEl.textContent = "시작됨: 10초마다 감지 폴링 중…";
+      // 즉시 실행
+      pollAndPlay();
+      // 10초마다 반복
+      setInterval(pollAndPlay, 10000);
+    });
   </script>
 </body>
 </html>
