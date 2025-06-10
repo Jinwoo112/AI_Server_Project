@@ -3,78 +3,61 @@ import uuid
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
 from gtts import gTTS
-from app.ai_model import analyze_image  # AI 모델 분석 함수
+from app.ai_model import analyze_image  # 이제 이 함수가 여러 모델을 동시에 분석
 
 router = APIRouter()
 
-# 업로드 및 TTS 저장 디렉터리
 UPLOAD_DIR = "static/uploads"
 TTS_DIR    = "static/tts"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(TTS_DIR, exist_ok=True)
 
-# 최근 결과 및 TTS 파일명 저장용 전역 변수
 stored_result: dict = {}
 
 @router.post("/analyze_image")
 async def analyze_and_tts(request: Request):
-    # 1) Content-Type 검사 (완화)
     ctype = request.headers.get("content-type", "")
     if not ctype.startswith("application/octet-stream"):
         raise HTTPException(status_code=415, detail="Unsupported Media Type")
 
-    # 2) 바디(raw bytes) 읽기
     body = await request.body()
     if not body:
         raise HTTPException(status_code=400, detail="Empty body")
 
-    # 3) 이미지 임시 저장
     img_name = f"{uuid.uuid4().hex}.jpg"
     img_path = os.path.join(UPLOAD_DIR, img_name)
     with open(img_path, "wb") as f:
         f.write(body)
 
-    # 4) AI 모델 분석
     try:
-        raw = analyze_image(img_path)
+        result = analyze_image(img_path)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Model error: {e}")
 
-    # 5) result 구조 추출
-    result = raw
-    if isinstance(raw, dict) and 'result' in raw:
-        result = raw['result']
+    # TTS 메시지 순서: 점자블럭 → 횡단보도 → 신호등
+    tts_lines = []
+    if result.get("has_braille"):
+        tts_lines.append("점자블럭이 있습니다.")
+    if result.get("has_crosswalk"):
+        tts_lines.append("횡단보도가 있습니다.")
+    if result.get("traffic_label"):
+        tts_lines.append(result["traffic_label"])
 
-    # 6) detections 리스트 확보
-    detections = []
-    if isinstance(result, dict) and 'detections' in result:
-        detections = result['detections'] or []
-    elif isinstance(result, list):
-        detections = result
-
-    # 7) TTS 생성 조건: detections 안에 횡단보도 또는 crosswalk
+    tts_message = " ".join(tts_lines) if tts_lines else "감지된 객체가 없습니다."
     tts_name = None
-    for det in detections:
-        if not isinstance(det, dict):
-            continue
-        obj_name = det.get('object') or det.get('class')
-        if obj_name in ('crosswalk', '횡단보도'):
-            # 횡단보도 감지 시 TTS 생성
-            text = "횡단보도가 감지되었습니다."
-            tts_name = f"{uuid.uuid4().hex}.mp3"
-            tts_path = os.path.join(TTS_DIR, tts_name)
-            try:
-                tts = gTTS(text=text, lang="ko")
-                tts.save(tts_path)
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=f"TTS error: {e}")
-            break
 
-    # 8) 결과 저장
+    if tts_lines:
+        tts_name = f"{uuid.uuid4().hex}.mp3"
+        tts_path = os.path.join(TTS_DIR, tts_name)
+        try:
+            tts = gTTS(text=tts_message, lang="ko")
+            tts.save(tts_path)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"TTS error: {e}")
+
     stored_result['result'] = result
     stored_result['tts'] = tts_name
 
-    # 9) JSON 응답: tts_url은 생성된 경우에만
     response = {'result': result}
     if tts_name:
         response['tts_url'] = '/latest_tts'
