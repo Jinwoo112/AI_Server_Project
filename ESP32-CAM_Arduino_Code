@@ -2,6 +2,8 @@
 // Install ch340
 // add library arduinoJson - Benoit Blanchon...
 // Preference - Board Manager "https://dl.espressif.com/dl/package_esp32_index.json"
+
+// -----------------------------------------------------------------------------
 #include "esp_camera.h"
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -10,6 +12,7 @@
 
 // -----------------------------------------------------------------------------
 // 1) 핀맵 정의 (AI-Thinker ESP32-CAM)
+// 1) Pin mapping for AI-Thinker ESP32-CAM
 #define PWDN_GPIO_NUM     32
 #define RESET_GPIO_NUM    -1
 #define XCLK_GPIO_NUM      0
@@ -30,11 +33,15 @@
 
 // -----------------------------------------------------------------------------
 // 2) Wi-Fi & 서버 설정
-const char* ssid      = "jinwooiphone";
-const char* password  = "12345678";
-const char* serverUrl = "https://7940-124-50-176-22.ngrok-free.app/analyze_image";
+// 2) Wi-Fi & server configuration
+const char* ssid      = "SSID";
+const char* password  = "PW";
+const char* serverUrl = "https://YourDomain/analyze_image";
 // -----------------------------------------------------------------------------
 
+// -----------------------------------------------------------------------------
+// 카메라 초기화 함수
+// Camera initialization function
 void initCamera() {
   camera_config_t config;
   config.pin_pwdn     = PWDN_GPIO_NUM;
@@ -69,19 +76,24 @@ void initCamera() {
   }
 
   // ✅ 색상 보정 설정 (기본값)
+  // ✅ Set camera color correction (default)
   sensor_t *s = esp_camera_sensor_get();
-  s->set_whitebal(s, 1);     // 자동 화이트밸런스 ON
+  s->set_whitebal(s, 1);     // 자동 화이트밸런스 ON / Auto white balance ON
   s->set_awb_gain(s, 1);     // AWB gain ON
-  s->set_brightness(s, 0);   // 밝기 기본값
-  s->set_saturation(s, 0);   // 채도 기본값
-  s->set_contrast(s, 0);     // 대비 기본값
-  s->set_gainceiling(s, (gainceiling_t)4); // 적절한 감도 (0~6)
+  s->set_brightness(s, 0);   // 밝기 기본값 / Default brightness
+  s->set_saturation(s, 0);   // 채도 기본값 / Default saturation
+  s->set_contrast(s, 0);     // 대비 기본값 / Default contrast
+  s->set_gainceiling(s, (gainceiling_t)4); // 적절한 감도 / Reasonable gain ceiling
 }
 // -----------------------------------------------------------------------------
 
+// -----------------------------------------------------------------------------
+// setup() 함수: 시스템 및 Wi-Fi 초기화
+// setup() function: Initialize system and Wi-Fi
 void setup() {
   Serial.begin(115200);
   Serial.println("\n📸 ESP32-CAM 시스템 시작");
+  // Start ESP32-CAM system
 
   initCamera();
   Serial.println("✅ Camera initialized");
@@ -102,7 +114,11 @@ void setup() {
     ESP.restart();
   }
 }
+// -----------------------------------------------------------------------------
 
+// -----------------------------------------------------------------------------
+// 서버로 이미지 전송 함수
+// Function to send image to server
 void sendImageToServer() {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("⚠️ Wi-Fi disconnected, retrying...");
@@ -116,6 +132,7 @@ void sendImageToServer() {
     return;
   }
 
+  // HTTPS POST 요청 준비 및 전송 / Prepare and send HTTPS POST request
   WiFiClientSecure client;
   client.setInsecure();
   HTTPClient http;
@@ -124,12 +141,14 @@ void sendImageToServer() {
   int code = http.POST(fb->buf, fb->len);
   esp_camera_fb_return(fb);
 
+  // 응답 코드 확인 / Check HTTP response code
   if (code <= 0) {
     Serial.printf("❌ HTTP POST failed, code=%d\n", code);
     http.end();
     return;
   }
 
+  // 응답 파싱 및 감지 결과 출력 / Parse JSON response and print result
   String resp = http.getString();
   http.end();
   Serial.println("📥 Response: " + resp);
@@ -143,9 +162,12 @@ void sendImageToServer() {
     Serial.println("🎯 Detected: " + String(doc["object"].as<const char*>()));  
   }
 }
+// -----------------------------------------------------------------------------
 
+// -----------------------------------------------------------------------------
+// loop() 함수: 주기적으로 이미지 전송
+// loop() function: Periodically send images to server
 void loop() {
   sendImageToServer();
-  delay(5000);  // 5초마다 서버에 이미지 전송
+  delay(3000);  // 3초마다 서버에 이미지 전송 / Send image every 3 seconds
 }
-
