@@ -11,6 +11,7 @@ MODEL_PATHS = {
 models = {k: YOLO(v) for k, v in MODEL_PATHS.items()}  # 각 모델 불러오기 / Load each YOLO model
 
 # 🔄 B↔R 채널 스왑 함수 / Swap Blue and Red channels in image
+# ESP32-CAM의 빨간색이 파란색으로 보이는 이슈때문에 추가했습니다.
 def swap_blue_red_channel(img_bgr):
     return img_bgr[:, :, ::-1].copy()
 
