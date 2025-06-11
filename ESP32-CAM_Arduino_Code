@@ -30,17 +30,13 @@
 
 // -----------------------------------------------------------------------------
 // 2) Wi-Fi & 서버 설정
-const char* ssid      = "ssid";
-const char* password  = "PW";
-const char* serverUrl = "https://YourDomainAddress";
+const char* ssid      = "jinwooiphone";
+const char* password  = "12345678";
+const char* serverUrl = "https://7940-124-50-176-22.ngrok-free.app/analyze_image";
 // -----------------------------------------------------------------------------
 
-// -----------------------------------------------------------------------------
-// 3) 카메라 초기화 함수 (각 필드를 순서 상관 없이 할당)
 void initCamera() {
   camera_config_t config;
-
-  // 핀 설정
   config.pin_pwdn     = PWDN_GPIO_NUM;
   config.pin_reset    = RESET_GPIO_NUM;
   config.pin_xclk     = XCLK_GPIO_NUM;
@@ -58,12 +54,11 @@ void initCamera() {
   config.pin_href     = HREF_GPIO_NUM;
   config.pin_pclk     = PCLK_GPIO_NUM;
 
-  // 카메라 및 LEDC 설정
-  config.ledc_timer   = LEDC_TIMER_0;      // 반드시 ledc_timer 먼저
-  config.ledc_channel = LEDC_CHANNEL_0;    // 그 다음 ledc_channel
+  config.ledc_timer   = LEDC_TIMER_0;
+  config.ledc_channel = LEDC_CHANNEL_0;
   config.xclk_freq_hz = 20000000;
   config.pixel_format = PIXFORMAT_JPEG;
-  config.frame_size   = FRAMESIZE_VGA;
+  config.frame_size   = FRAMESIZE_XGA;
   config.jpeg_quality = 10;
   config.fb_count     = 1;
 
@@ -72,6 +67,15 @@ void initCamera() {
     Serial.printf("❌ Camera init failed: 0x%x\n", err);
     while (true) { delay(1000); }
   }
+
+  // ✅ 색상 보정 설정 (기본값)
+  sensor_t *s = esp_camera_sensor_get();
+  s->set_whitebal(s, 1);     // 자동 화이트밸런스 ON
+  s->set_awb_gain(s, 1);     // AWB gain ON
+  s->set_brightness(s, 0);   // 밝기 기본값
+  s->set_saturation(s, 0);   // 채도 기본값
+  s->set_contrast(s, 0);     // 대비 기본값
+  s->set_gainceiling(s, (gainceiling_t)4); // 적절한 감도 (0~6)
 }
 // -----------------------------------------------------------------------------
 
@@ -79,11 +83,9 @@ void setup() {
   Serial.begin(115200);
   Serial.println("\n📸 ESP32-CAM 시스템 시작");
 
-  // 카메라 초기화
   initCamera();
   Serial.println("✅ Camera initialized");
 
-  // Wi-Fi 연결
   WiFi.begin(ssid, password);
   Serial.print("📶 Connecting to Wi-Fi");
   int tries = 0;
@@ -138,11 +140,12 @@ void sendImageToServer() {
     return;
   }
   if (doc.containsKey("object")) {
-    Serial.println("🎯 Detected: " + String(doc["object"].as<const char*>()));
+    Serial.println("🎯 Detected: " + String(doc["object"].as<const char*>()));  
   }
 }
 
 void loop() {
   sendImageToServer();
-  delay(3000);
+  delay(5000);  // 5초마다 서버에 이미지 전송
 }
+
