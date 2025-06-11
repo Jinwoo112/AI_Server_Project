@@ -4,6 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Vision Aid 실시간 감지</title>
+  <!--
+    CSS 스타일 정의
+    CSS style definitions
+  -->
   <style>
     body {
       font-family: sans-serif;
@@ -20,49 +24,97 @@
       font-size: 1.1rem;
       color: #333;
     }
+    .result-box {
+      margin-top: 2rem;
+      font-size: 1.1rem;
+      color: #222;
+      line-height: 1.8;
+    }
+    #ttsStatus {
+      margin-top: 1rem;
+      color: #007700;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
+  <!--
+    페이지 제목 및 주요 인터페이스 요소
+    Page title and main UI elements
+  -->
   <h1>Vision Aid 실시간 감지</h1>
   <p id="status">대기 중…</p>
   <button id="startBtn">시작</button>
   <audio id="player"></audio>
+  <p id="ttsStatus">🔇 음성 없음</p>
 
+  <!--
+    감지 결과 표시 영역
+    Detection result display area
+  -->
+  <div class="result-box">
+    <div><strong>신호등 상태:</strong> <span id="trafficLabel">-</span></div>
+    <div><strong>횡단보도:</strong> <span id="crosswalk">-</span></div>
+    <div><strong>횡단보도 위 객체:</strong> <span id="onCrosswalk">-</span></div>
+  </div>
+
+  <!--
+    실시간 감지 및 음성 재생용 JS 코드
+    JavaScript code for polling detection and playing TTS
+  -->
   <script>
-    const serverRoot = "";  // 빈 문자열로 두면 같은 호스트 기준 "/latest_detection" 호출
+    // 주요 요소 선택 / Select main DOM elements
+    const serverRoot = "";
     const statusEl   = document.getElementById("status");
     const player     = document.getElementById("player");
+    const ttsStatus  = document.getElementById("ttsStatus");
     const btn        = document.getElementById("startBtn");
 
+    const trafficEl  = document.getElementById("trafficLabel");
+    const crosswalkEl = document.getElementById("crosswalk");
+    const onCrossEl  = document.getElementById("onCrosswalk");
+
+    // 오디오 재생 종료시 상태 표시 업데이트 / Update status when audio ends
+    player.onended = () => {
+      ttsStatus.textContent = "🔇 음성 없음";
+    };
+
+    // 서버에서 결과 폴링 및 TTS 재생 / Poll server for results & play TTS
     async function pollAndPlay() {
       try {
-        // 1) 최신 감지 결과 JSON 가져오기
         const res = await fetch(serverRoot + "/latest_detection");
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const j = await res.json();
+        const result = j.result;
 
-        // 2) 상태 메시지 갱신: detections 배열을 object/class 필드 기준으로 표시
-        const dets = (j.result.detections || []).map(d => d.object || d.class);
-        statusEl.textContent = dets.length ? dets.join(", ") : "인식 없음";
+        // 감지 결과 UI 갱신 / Update UI with detection results
+        trafficEl.textContent = result.traffic_label || "없음";
+        crosswalkEl.textContent = result.has_crosswalk ? "있음" : "없음";
+        onCrossEl.textContent = (result.objects_on_crosswalk || []).join(", ") || "없음";
 
-        // 3) tts_url이 있으면 MP3 재생
+        statusEl.textContent = `${trafficEl.textContent}, 횡단보도: ${crosswalkEl.textContent}`;
+
+        // TTS 파일 있으면 음성 재생 / Play audio if TTS is available
         if (j.tts_url) {
-          player.src = serverRoot + j.tts_url;
+          const ttsPath = `${serverRoot + j.tts_url}?t=${Date.now()}`;
+          player.src = ttsPath;
           await player.play();
+          ttsStatus.textContent = "🎵 음성 출력 중...";
         }
       } catch (e) {
+        // 오류 발생 시 메시지 표시 / Show error on failure
         console.error("Polling error:", e);
-        statusEl.textContent = "오류 발생, 콘솔 확인";
+        statusEl.textContent = "❌ 오류 발생 (콘솔 확인)";
+        ttsStatus.textContent = "🔇 음성 없음";
       }
     }
 
+    // 시작 버튼 클릭 이벤트 처리 / Start polling on button click
     btn.addEventListener("click", () => {
       btn.disabled = true;
-      statusEl.textContent = "시작됨: 10초마다 감지 폴링 중…";
-      // 즉시 실행
+      statusEl.textContent = "시작됨: 5초마다 감지 폴링 중…";
       pollAndPlay();
-      // 10초마다 반복
-      setInterval(pollAndPlay, 10000);
+      setInterval(pollAndPlay, 5000);
     });
   </script>
 </body>
