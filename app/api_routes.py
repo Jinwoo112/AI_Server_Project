@@ -3,12 +3,12 @@ import uuid
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
 from gtts import gTTS
-from app.ai_model import analyze_image  # 이제 이 함수가 여러 모델을 동시에 분석
+from app.ai_model import analyze_image
 
 router = APIRouter()
 
 UPLOAD_DIR = "static/uploads"
-TTS_DIR    = "static/tts"
+TTS_DIR = "static/tts"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(TTS_DIR, exist_ok=True)
 
@@ -34,19 +34,23 @@ async def analyze_and_tts(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Model error: {e}")
 
-    # TTS 메시지 순서: 점자블럭 → 횡단보도 → 신호등
-    tts_lines = []
-    if result.get("has_braille"):
-        tts_lines.append("점자블럭이 있습니다.")
-    if result.get("has_crosswalk"):
-        tts_lines.append("횡단보도가 있습니다.")
-    if result.get("traffic_label"):
-        tts_lines.append(result["traffic_label"])
+    traffic = result.get("traffic_label", "")
+    objects = result.get("objects_on_crosswalk", [])
 
-    tts_message = " ".join(tts_lines) if tts_lines else "감지된 객체가 없습니다."
+    tts_message = "신호등이 감지되지 않았습니다."
+    if traffic == "초록불":
+        if any(o in ["car", "truck", "bus"] for o in objects):
+            tts_message = "초록불입니다. 차량 후진해주세요."
+        else:
+            tts_message = "초록 불입니다. 횡단하세요."
+    elif traffic == "빨간불":
+        if any(o == "person" for o in objects):
+            tts_message = "빨간불입니다. 건너지 말아주세요."
+        else:
+            tts_message = "빨간 불입니다. 건너지 마세요."
+
     tts_name = None
-
-    if tts_lines:
+    if tts_message:
         tts_name = f"{uuid.uuid4().hex}.mp3"
         tts_path = os.path.join(TTS_DIR, tts_name)
         try:
@@ -55,21 +59,21 @@ async def analyze_and_tts(request: Request):
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"TTS error: {e}")
 
-    stored_result['result'] = result
-    stored_result['tts'] = tts_name
+    stored_result["result"] = result
+    stored_result["tts"] = tts_name
 
-    response = {'result': result}
+    response = {"result": result}
     if tts_name:
-        response['tts_url'] = '/latest_tts'
+        response["tts_url"] = "/latest_tts"
     return JSONResponse(response)
 
 @router.get("/latest_detection")
 async def latest_detection():
-    if 'result' not in stored_result:
+    if "result" not in stored_result:
         raise HTTPException(status_code=404, detail="No detections yet")
-    resp = {'result': stored_result['result']}
-    if stored_result.get('tts'):
-        resp['tts_url'] = '/latest_tts'
+    resp = {"result": stored_result["result"]}
+    if stored_result.get("tts"):
+        resp["tts_url"] = "/latest_tts"
     return JSONResponse(resp)
 
 @router.get("/tts/{filename}")
@@ -81,7 +85,7 @@ def serve_tts(filename: str):
 
 @router.get("/latest_tts")
 def latest_tts():
-    tts_file = stored_result.get('tts')
+    tts_file = stored_result.get("tts")
     if not tts_file:
         raise HTTPException(status_code=404, detail="No TTS available yet")
     path = os.path.join(TTS_DIR, tts_file)
